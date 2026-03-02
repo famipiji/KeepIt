@@ -1,14 +1,50 @@
 require('dotenv').config();
-const express = require('express');
-const mysql   = require('mysql2');
-const multer  = require('multer');
-const cors    = require('cors');
+const express            = require('express');
+const mysql              = require('mysql2');
+const multer             = require('multer');
+const cors               = require('cors');
+const { Client }         = require('@elastic/elasticsearch');
+const pdfParse           = require('pdf-parse');
+const mammoth            = require('mammoth');
+const Tesseract          = require('tesseract.js');
+const fs                 = require('fs');
+const path               = require('path');
 
-const app    = express();
-const upload = multer({ storage: multer.memoryStorage() }); // store file in memory buffer
+const app        = express();
+const upload     = multer({ storage: multer.memoryStorage() });
+const esClient   = new Client({ node: process.env.ES_NODE || 'http://localhost:9200' });
+const EXTRACTS   = path.join(__dirname, 'extracts');
+
+// Ensure extracts folder exists
+if (!fs.existsSync(EXTRACTS)) fs.mkdirSync(EXTRACTS);
 
 app.use(cors());
 app.use(express.json());
+
+// ── Text extraction ───────────────────────────────────────────
+async function extractText(buffer, filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  try {
+    if (ext === 'pdf') {
+      const data = await pdfParse(buffer);
+      return data.text;
+    }
+    if (ext === 'docx') {
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value;
+    }
+    if (['txt', 'csv', 'md'].includes(ext)) {
+      return buffer.toString('utf-8');
+    }
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
+      const { data: { text } } = await Tesseract.recognize(buffer, 'eng', { logger: () => {} });
+      return text;
+    }
+  } catch (e) {
+    console.error(`Text extraction failed for ${filename}:`, e.message);
+  }
+  return '';
+}
 
 // ── MySQL connection ──────────────────────────────────────────
 const db = mysql.createConnection({
@@ -41,16 +77,49 @@ db.connect(err => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, err => { if (err) console.error('Error creating activity table:', err); });
+
+  // ── Elasticsearch index setup ───────────────────────────────
+  esClient.indices.create({
+    index: 'documents',
+    mappings: {
+      properties: {
+        doc_id:  { type: 'integer' },
+        name:    { type: 'text' },
+        content: { type: 'text' }
+      }
+    }
+  }).catch(e => {
+    if (!e.message.includes('resource_already_exists_exception')) {
+      console.error('ES index setup error:', e.message);
+    }
+  });
 });
 
 // ── Upload a file ─────────────────────────────────────────────
-app.post('/api/upload', upload.single('file'), (req, res) => {
+app.post('/api/upload', upload.single('file'), async (req, res) => {
   const { originalname, size, mimetype, buffer } = req.file;
 
   const sql = 'INSERT INTO documents (name, size, type, data) VALUES (?, ?, ?, ?)';
-  db.query(sql, [originalname, size, mimetype, buffer], (err, result) => {
+  db.query(sql, [originalname, size, mimetype, buffer], async (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
     db.query('INSERT INTO activity (item, status) VALUES (?, ?)', [`Uploaded "${originalname}"`, 'Completed'], err2 => { if (err2) console.error('Activity log error:', err2); });
+
+    // Extract text, save as .txt file, and index to Elasticsearch
+    const text        = await extractText(buffer, originalname);
+    const extractPath = path.join(EXTRACTS, `${result.insertId}.txt`);
+    const header      = `Source: ${originalname}\nExtracted: ${new Date().toISOString()}\n\n`;
+
+    fs.writeFile(extractPath, header + (text || '[No text could be extracted]'), err3 => {
+      if (err3) console.error('Failed to save extract file:', err3.message);
+      else console.log(`Saved extract: ${result.insertId}.txt`);
+    });
+
+    esClient.index({
+      index: 'documents',
+      id: String(result.insertId),
+      document: { doc_id: result.insertId, name: originalname, content: text }
+    }).catch(e => console.error('ES index error:', e.message));
+
     res.json({ id: result.insertId, name: originalname, size, type: mimetype });
   });
 });
@@ -82,9 +151,58 @@ app.delete('/api/documents/:id', (req, res) => {
     db.query('DELETE FROM documents WHERE id = ?', [req.params.id], (err2) => {
       if (err2) return res.status(500).json({ error: err2.message });
       db.query('INSERT INTO activity (item, status) VALUES (?, ?)', [`Deleted "${name}"`, 'Completed'], err3 => { if (err3) console.error('Activity log error:', err3); });
+      esClient.delete({ index: 'documents', id: String(req.params.id) })
+        .catch(e => console.error('ES delete error:', e.message));
+      // Delete the extract .txt file if it exists
+      const extractPath = path.join(EXTRACTS, `${req.params.id}.txt`);
+      fs.unlink(extractPath, () => {});
       res.json({ success: true });
     });
   });
+});
+
+// ── View a file inline (for browser preview) ─────────────────
+app.get('/api/documents/:id/view', (req, res) => {
+  db.query('SELECT name, type, data FROM documents WHERE id = ?', [req.params.id], (err, rows) => {
+    if (err || rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    const doc = rows[0];
+    res.setHeader('Content-Type', doc.type);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.name}"`);
+    res.send(doc.data);
+  });
+});
+
+// ── Get extracted text for a document ────────────────────────
+app.get('/api/documents/:id/extract', (req, res) => {
+  const extractPath = path.join(EXTRACTS, `${req.params.id}.txt`);
+  if (!fs.existsSync(extractPath)) {
+    return res.status(404).json({ error: 'No extract found for this document' });
+  }
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.sendFile(extractPath);
+});
+
+// ── Content search via Elasticsearch ─────────────────────────
+app.get('/api/search/content', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.json([]);
+  try {
+    const result = await esClient.search({
+      index: 'documents',
+      query: { multi_match: { query: q, fields: ['name', 'content'] } },
+      highlight: {
+        fields: { content: { fragment_size: 160, number_of_fragments: 1 } }
+      }
+    });
+    const hits = result.hits.hits.map(h => ({
+      id:      h._source.doc_id,
+      name:    h._source.name,
+      snippet: h.highlight?.content?.[0] ?? ''
+    }));
+    res.json(hits);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Get all activity ───────────────────────────────────────────
