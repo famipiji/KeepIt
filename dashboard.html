@@ -103,22 +103,11 @@
       position: relative;
       flex: 1;
       min-width: 200px;
-      max-width: 420px;
-    }
-
-    .search-wrapper .search-icon {
-      position: absolute;
-      left: 13px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #9ca3af;
-      font-size: 1rem;
-      pointer-events: none;
     }
 
     .search-wrapper input {
       width: 100%;
-      padding: 10px 14px 10px 38px;
+      padding: 10px 14px;
       border: 1.5px solid #d1d5db;
       border-radius: 8px;
       font-size: 0.9rem;
@@ -136,6 +125,7 @@
     .btn-upload {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
       background: #4f46e5;
       color: #ffffff;
@@ -147,6 +137,7 @@
       cursor: pointer;
       transition: background 0.2s, transform 0.1s;
       white-space: nowrap;
+      min-width: 160px;
     }
 
     .btn-upload:hover {
@@ -228,76 +219,40 @@
       color: #6b7280;
     }
 
-    /* Document grid */
-    .doc-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 16px;
+    /* Documents table */
+    .docs-table-wrapper {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      overflow-y: auto;
+      max-height: 490px;
       margin-bottom: 36px;
     }
 
-    .doc-card {
-      background: #ffffff;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      padding: 18px 14px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
+    .doc-link {
+      color: #4f46e5;
       cursor: pointer;
-      transition: box-shadow 0.2s, transform 0.15s;
-      position: relative;
+      font-weight: 500;
     }
 
-    .doc-card:hover {
-      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
-      transform: translateY(-2px);
+    .doc-link:hover {
+      text-decoration: underline;
     }
 
-    .doc-card .file-icon {
-      font-size: 2.4rem;
-    }
-
-    .doc-card .file-name {
-      font-size: 0.78rem;
-      color: #374151;
-      font-weight: 600;
-      text-align: center;
-      word-break: break-all;
-    }
-
-    .doc-card .file-size {
-      font-size: 0.72rem;
-      color: #9ca3af;
-    }
-
-    .doc-card .btn-remove {
-      position: absolute;
-      top: 8px;
-      right: 8px;
+    .btn-remove-row {
       background: none;
       border: none;
       color: #d1d5db;
-      font-size: 1rem;
+      font-size: 0.85rem;
       cursor: pointer;
-      line-height: 1;
-      padding: 2px 4px;
+      padding: 4px 8px;
       border-radius: 4px;
       transition: color 0.15s, background 0.15s;
     }
 
-    .doc-card .btn-remove:hover {
+    .btn-remove-row:hover {
       color: #ef4444;
       background: #fee2e2;
-    }
-
-    .empty-docs {
-      grid-column: 1 / -1;
-      text-align: center;
-      color: #9ca3af;
-      font-size: 0.9rem;
-      padding: 32px 0;
     }
 
     /* Recent activity */
@@ -305,7 +260,8 @@
       background: #ffffff;
       border-radius: 12px;
       box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-      overflow: hidden;
+      overflow-y: auto;
+      max-height: 315px;
       margin-bottom: 40px;
     }
 
@@ -327,6 +283,10 @@
       text-transform: uppercase;
       letter-spacing: 0.6px;
       border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      background: #f9fafb;
+      z-index: 1;
     }
 
     tbody tr {
@@ -402,11 +362,11 @@
       font-weight: 600;
       color: #6b7280;
       white-space: nowrap;
+      min-width: 160px;
     }
 
     .content-search-bar .search-wrapper {
       flex: 1;
-      max-width: 520px;
     }
 
     /* Content search results */
@@ -644,21 +604,19 @@
       </div>
     </div>
 
-    <!-- Toolbar: search + upload -->
+    <!-- Toolbar: upload + search -->
     <div class="toolbar">
-      <div class="search-wrapper">
-        <span class="search-icon"></span>
-        <input type="text" id="searchInput" placeholder="Search documents or activity..." />
-      </div>
-      <button class="btn-upload" id="uploadBtn">Upload Document
-      </button>
+      <button class="btn-upload" id="uploadBtn">+ Upload Document</button>
       <input type="file" id="fileInput" multiple
         accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar" />
+      <div class="search-wrapper">
+        <input type="text" id="searchInput" placeholder="Search documents..." />
+      </div>
     </div>
 
     <!-- Content search bar -->
     <div class="content-search-bar">
-      <span class="cs-label">Search inside files:</span>
+      <span class="cs-label">Search Keyword:</span>
       <div class="search-wrapper">
         <input type="text" id="contentSearchInput" placeholder="Search for keywords inside documents..." />
       </div>
@@ -690,8 +648,20 @@
       <span class="section-title">Uploaded Documents</span>
       <span class="doc-count" id="docCount">0 files</span>
     </div>
-    <div class="doc-grid" id="docGrid">
-      <div class="empty-docs" id="emptyDocs">No documents uploaded yet. Click "Upload Document" to get started.</div>
+    <div class="docs-table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>File Name</th>
+            <th>Latest Version</th>
+            <th>Extension</th>
+            <th>Created On</th>
+            <th>Created By</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="docGrid"></tbody>
+      </table>
     </div>
 
     <!-- Recent Activity -->
@@ -766,55 +736,57 @@
     let documents = [];
 
     function renderDocs(filter) {
-      const grid = document.getElementById('docGrid');
-      const empty = document.getElementById('emptyDocs');
+      const tbody = document.getElementById('docGrid');
       const query = (filter || '').toLowerCase();
 
       const filtered = query
         ? documents.filter(d => d.name.toLowerCase().includes(query))
         : documents;
 
-      [...grid.querySelectorAll('.doc-card')].forEach(c => c.remove());
+      tbody.innerHTML = '';
 
       if (filtered.length === 0) {
-        empty.style.display = 'block';
-        empty.textContent = documents.length === 0
+        const msg = documents.length === 0
           ? 'No documents uploaded yet. Click "Upload Document" to get started.'
           : 'No documents match your search.';
-      } else {
-        empty.style.display = 'none';
-        filtered.forEach(doc => {
-          const card = document.createElement('div');
-          card.className = 'doc-card';
-          card.innerHTML = `
-            <button class="btn-remove" title="Remove">&#10005;</button>
-            <div class="file-icon">${getFileIcon(doc.name)}</div>
-            <div class="file-name">${doc.name}</div>
-            <div class="file-size">${formatSize(doc.size)}</div>
-          `;
-
-          // Open modal on card click
-          card.addEventListener('click', () => openDocModal(doc));
-
-          // Delete from MySQL
-          card.querySelector('.btn-remove').addEventListener('click', async (e) => {
-            e.stopPropagation();
-            try {
-              const res = await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE' });
-              if (!res.ok) throw new Error();
-              documents = documents.filter(d => d.id !== doc.id);
-              updateStats();
-              renderDocs(document.getElementById('searchInput').value);
-              showToast('Removed: ' + doc.name);
-              loadActivity();
-            } catch {
-              showToast('Error: could not delete file');
-            }
-          });
-
-          grid.appendChild(card);
-        });
+        tbody.innerHTML = `<tr class="no-results"><td colspan="6">${msg}</td></tr>`;
+        return;
       }
+
+      filtered.forEach(doc => {
+        const ext  = doc.name.split('.').pop().toLowerCase();
+        const date = doc.uploaded_at
+          ? new Date(doc.uploaded_at).toLocaleDateString('en-GB')
+          : '-';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="doc-link">${doc.name}</span></td>
+          <td>1</td>
+          <td>${ext}</td>
+          <td>${date}</td>
+          <td>${loggedInUser}</td>
+          <td><button class="btn-remove-row" title="Delete">&#10005;</button></td>
+        `;
+
+        tr.querySelector('.doc-link').addEventListener('click', () => openDocModal(doc));
+
+        tr.querySelector('.btn-remove-row').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            const res = await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error();
+            documents = documents.filter(d => d.id !== doc.id);
+            updateStats();
+            renderDocs(document.getElementById('searchInput').value);
+            showToast('Removed: ' + doc.name);
+            loadActivity();
+          } catch {
+            showToast('Error: could not delete file');
+          }
+        });
+
+        tbody.appendChild(tr);
+      });
     }
 
     function updateStats() {
@@ -830,7 +802,7 @@
       try {
         const res  = await fetch(`${API}/api/documents`);
         const data = await res.json();
-        documents  = data.map(d => ({ id: d.id, name: d.name, size: d.size }));
+        documents  = data.map(d => ({ id: d.id, name: d.name, size: d.size, uploaded_at: d.uploaded_at }));
         updateStats();
         renderDocs();
       } catch {
