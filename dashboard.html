@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+    }
+
+    /* Navbar */
+    nav {
+      background: #1a1a2e;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    nav .brand {
+      color: #ffffff;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    nav .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    nav .welcome-text {
+      color: #a5b4fc;
+      font-size: 0.9rem;
+    }
+
+    nav .btn-logout {
+      background: #4f46e5;
+      color: #ffffff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    nav .btn-logout:hover {
+      background: #4338ca;
+    }
+
+    /* Main content */
+    .container {
+      max-width: 1100px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+
+    /* Page header row */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .page-header h1 {
+      font-size: 1.6rem;
+      color: #1a1a2e;
+    }
+
+    .page-header p {
+      color: #6b7280;
+      margin-top: 4px;
+      font-size: 0.95rem;
+    }
+
+    /* Toolbar: search + upload */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 32px;
+    }
+
+    .search-wrapper {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+      max-width: 420px;
+    }
+
+    .search-wrapper .search-icon {
+      position: absolute;
+      left: 13px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #9ca3af;
+      font-size: 1rem;
+      pointer-events: none;
+    }
+
+    .search-wrapper input {
+      width: 100%;
+      padding: 10px 14px 10px 38px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: #111827;
+      background: #ffffff;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-wrapper input:focus {
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+    }
+
+    .btn-upload {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #4f46e5;
+      color: #ffffff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .btn-upload:hover {
+      background: #4338ca;
+    }
+
+    .btn-upload:active {
+      transform: scale(0.97);
+    }
+
+    /* Hidden file input */
+    #fileInput {
+      display: none;
+    }
+
+    /* Stats cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-bottom: 36px;
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .stat-card .stat-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .stat-card .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+
+    .stat-card .stat-change {
+      font-size: 0.8rem;
+      color: #10b981;
+      font-weight: 500;
+    }
+
+    .stat-card .stat-change.down {
+      color: #ef4444;
+    }
+
+    .stat-card .icon {
+      font-size: 1.6rem;
+      margin-bottom: 4px;
+    }
+
+    /* Documents section */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+
+    .doc-count {
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    /* Document grid */
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+
+    .doc-card {
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: box-shadow 0.2s, transform 0.15s;
+      position: relative;
+    }
+
+    .doc-card:hover {
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+      transform: translateY(-2px);
+    }
+
+    .doc-card .file-icon {
+      font-size: 2.4rem;
+    }
+
+    .doc-card .file-name {
+      font-size: 0.78rem;
+      color: #374151;
+      font-weight: 600;
+      text-align: center;
+      word-break: break-all;
+    }
+
+    .doc-card .file-size {
+      font-size: 0.72rem;
+      color: #9ca3af;
+    }
+
+    .doc-card .btn-remove {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: #d1d5db;
+      font-size: 1rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .doc-card .btn-remove:hover {
+      color: #ef4444;
+      background: #fee2e2;
+    }
+
+    .empty-docs {
+      grid-column: 1 / -1;
+      text-align: center;
+      color: #9ca3af;
+      font-size: 0.9rem;
+      padding: 32px 0;
+    }
+
+    /* Recent activity */
+    .activity-card {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      overflow: hidden;
+      margin-bottom: 40px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead tr {
+      background: #f9fafb;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 14px 20px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid #f3f4f6;
+      transition: background 0.15s;
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background: #f9fafb;
+    }
+
+    tbody td {
+      padding: 14px 20px;
+      font-size: 0.9rem;
+      color: #374151;
+    }
+
+    .no-results td {
+      text-align: center;
+      color: #9ca3af;
+      padding: 28px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .badge.success { background: #d1fae5; color: #065f46; }
+    .badge.pending { background: #fef3c7; color: #92400e; }
+    .badge.failed  { background: #fee2e2; color: #991b1b; }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: #1a1a2e;
+      color: #ffffff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav>
+    <span class="brand">KeepIt</span>
+    <div class="nav-right">
+      <span class="welcome-text" id="welcomeText">Welcome, user</span>
+      <button class="btn-logout" id="logoutBtn">Logout</button>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="container">
+
+    <!-- Page header -->
+    <div class="page-header">
+      <div>
+        <h1>Dashboard</h1>
+        <p>Here's what's happening today.</p>
+      </div>
+    </div>
+
+    <!-- Toolbar: search + upload -->
+    <div class="toolbar">
+      <div class="search-wrapper">
+        <span class="search-icon"></span>
+        <input type="text" id="searchInput" placeholder="Search documents or activity..." />
+      </div>
+      <button class="btn-upload" id="uploadBtn">Upload Document
+      </button>
+      <input type="file" id="fileInput" multiple
+        accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar" />
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="icon">&#128194;</div>
+        <div class="stat-label">Total Documents</div>
+        <div class="stat-value" id="statTotal">0</div>
+        <div class="stat-change" id="statTotalHint">No files uploaded yet</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">&#9203;</div>
+        <div class="stat-label">Pending</div>
+      </div>
+
+    </div>
+
+    <!-- Documents -->
+    <div class="section-header">
+      <span class="section-title">Uploaded Documents</span>
+      <span class="doc-count" id="docCount">0 files</span>
+    </div>
+    <div class="doc-grid" id="docGrid">
+      <div class="empty-docs" id="emptyDocs">No documents uploaded yet. Click "Upload Document" to get started.</div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="section-header">
+      <span class="section-title">Recent Activity</span>
+    </div>
+    <div class="activity-card">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Item</th>
+            <th>Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="activityBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API = 'http://localhost:3000';
+
+    // ── Auth guard ────────────────────────────────────────────
+    const loggedInUser = sessionStorage.getItem('loggedInUser');
+    if (!loggedInUser) window.location.href = 'login.html';
+    document.getElementById('welcomeText').textContent = 'Welcome, ' + loggedInUser;
+
+    document.getElementById('logoutBtn').addEventListener('click', function () {
+      sessionStorage.removeItem('loggedInUser');
+      window.location.href = 'login.html';
+    });
+
+    // ── File icon helper ──────────────────────────────────────
+    function getFileIcon(name) {
+      const ext = name.split('.').pop().toLowerCase();
+      const map = {
+        pdf: '📄', jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️',
+        bmp: '🖼️', webp: '🖼️', svg: '🖼️', doc: '📝', docx: '📝',
+        xls: '📊', xlsx: '📊', ppt: '📋', pptx: '📋', txt: '📃',
+        csv: '📊', zip: '🗜️', rar: '🗜️'
+      };
+      return map[ext] || '📁';
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    // ── Document store ────────────────────────────────────────
+    let documents = [];
+
+    function renderDocs(filter) {
+      const grid = document.getElementById('docGrid');
+      const empty = document.getElementById('emptyDocs');
+      const query = (filter || '').toLowerCase();
+
+      const filtered = query
+        ? documents.filter(d => d.name.toLowerCase().includes(query))
+        : documents;
+
+      [...grid.querySelectorAll('.doc-card')].forEach(c => c.remove());
+
+      if (filtered.length === 0) {
+        empty.style.display = 'block';
+        empty.textContent = documents.length === 0
+          ? 'No documents uploaded yet. Click "Upload Document" to get started.'
+          : 'No documents match your search.';
+      } else {
+        empty.style.display = 'none';
+        filtered.forEach(doc => {
+          const card = document.createElement('div');
+          card.className = 'doc-card';
+          card.innerHTML = `
+            <button class="btn-remove" title="Remove">&#10005;</button>
+            <div class="file-icon">${getFileIcon(doc.name)}</div>
+            <div class="file-name">${doc.name}</div>
+            <div class="file-size">${formatSize(doc.size)}</div>
+          `;
+
+          // Download on card click
+          card.addEventListener('click', () => {
+            window.location.href = `${API}/api/documents/${doc.id}`;
+          });
+
+          // Delete from MySQL
+          card.querySelector('.btn-remove').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+              const res = await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE' });
+              if (!res.ok) throw new Error();
+              documents = documents.filter(d => d.id !== doc.id);
+              updateStats();
+              renderDocs(document.getElementById('searchInput').value);
+              showToast('Removed: ' + doc.name);
+              loadActivity();
+            } catch {
+              showToast('Error: could not delete file');
+            }
+          });
+
+          grid.appendChild(card);
+        });
+      }
+    }
+
+    function updateStats() {
+      const total = documents.length;
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('docCount').textContent = total + (total === 1 ? ' file' : ' files');
+      document.getElementById('statTotalHint').textContent =
+        total === 0 ? 'No files uploaded yet' : total + ' document' + (total === 1 ? '' : 's') + ' stored';
+    }
+
+    // ── Load documents from MySQL ─────────────────────────────
+    async function loadDocuments() {
+      try {
+        const res  = await fetch(`${API}/api/documents`);
+        const data = await res.json();
+        documents  = data.map(d => ({ id: d.id, name: d.name, size: d.size }));
+        updateStats();
+        renderDocs();
+      } catch {
+        showToast('Could not connect to server');
+      }
+    }
+
+    // ── Upload to MySQL ───────────────────────────────────────
+    document.getElementById('uploadBtn').addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+
+    document.getElementById('fileInput').addEventListener('change', async function () {
+      const files = Array.from(this.files);
+      if (files.length === 0) return;
+
+      showToast('Uploading...');
+
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const res  = await fetch(`${API}/api/upload`, { method: 'POST', body: formData });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          documents.push({ id: data.id, name: data.name, size: data.size });
+        } catch {
+          showToast('Failed to upload: ' + file.name);
+        }
+      }
+
+      updateStats();
+      renderDocs(document.getElementById('searchInput').value);
+      showToast(files.length === 1
+        ? 'Uploaded: ' + files[0].name
+        : files.length + ' files uploaded');
+      loadActivity();
+
+      this.value = '';
+    });
+
+    // ── Search ────────────────────────────────────────────────
+    document.getElementById('searchInput').addEventListener('input', function () {
+      const q = this.value.toLowerCase();
+
+      renderDocs(q);
+
+      const rows = document.querySelectorAll('#activityBody tr[data-item]');
+      let anyVisible = false;
+      rows.forEach(row => {
+        const match = row.dataset.item.toLowerCase().includes(q);
+        row.style.display = match ? '' : 'none';
+        if (match) anyVisible = true;
+      });
+
+      const noResultsRow = document.getElementById('noResultsRow');
+      if (!anyVisible && q) {
+        if (!noResultsRow) {
+          const tr = document.createElement('tr');
+          tr.id = 'noResultsRow';
+          tr.className = 'no-results';
+          tr.innerHTML = '<td colspan="4">No activity matches your search.</td>';
+          document.getElementById('activityBody').appendChild(tr);
+        }
+      } else if (noResultsRow) {
+        noResultsRow.remove();
+      }
+    });
+
+    // ── Toast ─────────────────────────────────────────────────
+    let toastTimer;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2800);
+    }
+
+    // ── Load activity from MySQL ──────────────────────────────
+    async function loadActivity() {
+      try {
+        const res  = await fetch(`${API}/api/activity`);
+        const data = await res.json();
+        const tbody = document.getElementById('activityBody');
+        tbody.innerHTML = '';
+
+        if (data.length === 0) {
+          tbody.innerHTML = '<tr class="no-results"><td colspan="4">No activity records found.</td></tr>';
+          return;
+        }
+
+        const badgeClass = { Completed: 'success', Pending: 'pending', Failed: 'failed' };
+
+        data.forEach((row, i) => {
+          const date = new Date(row.created_at).toISOString().split('T')[0];
+          const cls  = badgeClass[row.status] || 'pending';
+          const tr   = document.createElement('tr');
+          tr.dataset.item = row.item;
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td>${row.item}</td>
+            <td>${date}</td>
+            <td><span class="badge ${cls}">${row.status}</span></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch {
+        showToast('Could not load activity');
+      }
+    }
+
+    // Init — load from MySQL
+    loadDocuments();
+    loadActivity();
+  </script>
+</body>
+</html>
