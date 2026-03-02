@@ -7,8 +7,14 @@ const { Client }         = require('@elastic/elasticsearch');
 const pdfParse           = require('pdf-parse');
 const mammoth            = require('mammoth');
 const Tesseract          = require('tesseract.js');
+const { createCanvas }   = require('canvas');
+const pdfjsLib           = require('pdfjs-dist/legacy/build/pdf.js');
 const fs                 = require('fs');
 const path               = require('path');
+
+// Absolute path (no file:// prefix — require() needs a plain path, not a URL)
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  require.resolve('pdfjs-dist/legacy/build/pdf.worker.js');
 
 const app        = express();
 const upload     = multer({ storage: multer.memoryStorage() });
@@ -26,8 +32,29 @@ async function extractText(buffer, filename) {
   const ext = filename.split('.').pop().toLowerCase();
   try {
     if (ext === 'pdf') {
-      const data = await pdfParse(buffer);
-      return data.text;
+      //try native text extraction (fast, accurate for text-based PDFs)
+      const native = await pdfParse(buffer);
+      if (native.text.trim().length >= 50) {
+        console.log(`Extracted ${native.text.length} chars from PDF (native): ${filename}`);
+        return native.text;
+      }
+      //scanned / image-only PDF — render each page and OCR it
+      console.log(`Low native text, switching to OCR for: ${filename}`);
+      const uint8Array = new Uint8Array(buffer);
+      const pdf        = await pdfjsLib.getDocument({ data: uint8Array, useSystemFonts: true }).promise;
+      let fullText     = '';
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page     = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas   = createCanvas(viewport.width, viewport.height);
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        const { data: { text } } = await Tesseract.recognize(
+          canvas.toBuffer('image/png'), 'eng', { logger: () => {} }
+        );
+        fullText += text + '\n';
+      }
+      console.log(`Extracted ${fullText.length} chars from PDF (OCR): ${filename}`);
+      return fullText;
     }
     if (ext === 'docx') {
       const result = await mammoth.extractRawText({ buffer });
