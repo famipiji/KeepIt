@@ -137,7 +137,8 @@
       cursor: pointer;
       transition: background 0.2s, transform 0.1s;
       white-space: nowrap;
-      min-width: 160px;
+      width: 170px;
+      flex-shrink: 0;
     }
 
     .btn-upload:hover {
@@ -362,7 +363,8 @@
       font-weight: 600;
       color: #6b7280;
       white-space: nowrap;
-      min-width: 160px;
+      width: 170px;
+      flex-shrink: 0;
     }
 
     .content-search-bar .search-wrapper {
@@ -636,10 +638,7 @@
         <div class="stat-value" id="statTotal">0</div>
         <div class="stat-change" id="statTotalHint">No files uploaded yet</div>
       </div>
-      <div class="stat-card">
-        <div class="icon">&#9203;</div>
-        <div class="stat-label">Pending</div>
-      </div>
+
 
     </div>
 
@@ -1028,7 +1027,7 @@
             const card = document.createElement('div');
             card.className = 'result-card';
             card.innerHTML = `
-              <div class="rc-icon">${getFileIcon(hit.name)}</div>
+              <div class="rc-icon"></div>
               <div class="rc-body">
                 <div class="rc-name">${hit.name}</div>
                 <div class="rc-snippet">${hit.snippet || '<em>No preview available</em>'}</div>

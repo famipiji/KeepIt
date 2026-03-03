@@ -21,5 +21,10 @@
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^3.11.174",
     "tesseract.js": "^7.0.0"
-  }
+  },
+
+  "scripts": {
+  "start": "node server.js"
+}
+
 }

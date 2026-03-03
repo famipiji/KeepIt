@@ -26,6 +26,8 @@ if (!fs.existsSync(EXTRACTS)) fs.mkdirSync(EXTRACTS);
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(__dirname));
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'login.html')));
 
 // ── Text extraction ───────────────────────────────────────────
 async function extractText(buffer, filename) {
