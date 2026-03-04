@@ -387,6 +387,75 @@
       transform: translateY(0);
     }
 
+    /* Upload progress indicator */
+    .upload-progress {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: #ffffff;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+      padding: 14px 18px;
+      min-width: 220px;
+      z-index: 1000;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      transform: translateY(10px);
+      opacity: 0;
+      transition: opacity 0.25s, transform 0.25s;
+    }
+
+    .upload-progress.show {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .upload-progress .up-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .upload-progress .up-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #1a1a2e;
+    }
+
+    .upload-progress .up-count {
+      font-size: 0.82rem;
+      color: #6b7280;
+      white-space: nowrap;
+    }
+
+    .upload-progress .up-bar-track {
+      height: 5px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .upload-progress .up-bar-fill {
+      height: 100%;
+      background: #4f46e5;
+      border-radius: 999px;
+      width: 0%;
+      transition: width 0.2s ease;
+    }
+
+    .upload-progress .up-filename {
+      font-size: 0.78rem;
+      color: #9ca3af;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+    }
+
     /* Content search bar */
     .content-search-bar {
       display: flex;
@@ -820,6 +889,16 @@
     <div class="drop-sub">Release to start uploading</div>
   </div>
 
+  <!-- Upload progress -->
+  <div class="upload-progress" id="uploadProgress">
+    <div class="up-header">
+      <span class="up-label">Uploading...</span>
+      <span class="up-count" id="upCount">0 / 0</span>
+    </div>
+    <div class="up-bar-track"><div class="up-bar-fill" id="upBarFill"></div></div>
+    <div class="up-filename" id="upFilename"></div>
+  </div>
+
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
@@ -986,10 +1065,30 @@
     }
 
     // ── Upload to MySQL ───────────────────────────────────────
+    const upProgress  = document.getElementById('uploadProgress');
+    const upCount     = document.getElementById('upCount');
+    const upBarFill   = document.getElementById('upBarFill');
+    const upFilename  = document.getElementById('upFilename');
+
+    function showUploadProgress(done, total, filename) {
+      upCount.textContent    = `${done} / ${total}`;
+      upBarFill.style.width  = `${Math.round((done / total) * 100)}%`;
+      upFilename.textContent = filename || '';
+      upProgress.classList.add('show');
+    }
+
+    function hideUploadProgress() {
+      upProgress.classList.remove('show');
+    }
+
     async function uploadFiles(files) {
       if (!files.length) return;
-      showToast('Uploading...');
+      const total = files.length;
+      let done = 0;
+      showUploadProgress(0, total, files[0].name);
+
       for (const file of files) {
+        upFilename.textContent = file.name;
         const formData = new FormData();
         formData.append('file', file);
         try {
@@ -1000,11 +1099,15 @@
         } catch {
           showToast('Failed to upload: ' + file.name);
         }
+        done++;
+        showUploadProgress(done, total, file.name);
       }
+
       updateStats();
       renderDocs(document.getElementById('searchInput').value);
-      showToast(files.length === 1 ? 'Uploaded: ' + files[0].name : files.length + ' files uploaded');
+      showToast(total === 1 ? 'Uploaded: ' + files[0].name : total + ' files uploaded');
       loadActivity();
+      setTimeout(hideUploadProgress, 1200);
     }
 
     document.getElementById('uploadBtn').addEventListener('click', () => {
