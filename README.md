@@ -1,5 +1,10 @@
 # KeepIt
 
+<img src="img/1.png">
+<img src="img/2.png">
+<img src="img/3.png">
+<img src="img/4.png">
+
 A web-based document management system that lets you upload, search, view, and manage files — with full-text content search powered by Elasticsearch and OCR support for scanned documents.
 
 ---
