@@ -693,7 +693,6 @@
     <div class="page-header">
       <div>
         <h1>Dashboard</h1>
-        <p>Here's what's happening today.</p>
       </div>
     </div>
 
@@ -724,13 +723,9 @@
     <!-- Stats -->
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="icon">&#128194;</div>
-        <div class="stat-label">Total Documents</div>
         <div class="stat-value" id="statTotal">0</div>
         <div class="stat-change" id="statTotalHint">No files uploaded yet</div>
       </div>
-
-
     </div>
 
     <!-- Documents -->
@@ -824,10 +819,10 @@
       return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
-    // ── Document store ────────────────────────────────────────
+    // ── Document store 
     let documents = [];
     let docsPage = 1;
-    const DOCS_PER_PAGE = 7;
+    const DOCS_PER_PAGE = 5;
 
     function pageRange(current, total) {
       if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -1079,7 +1074,7 @@
       }
     }
 
-    // ── Document viewer modal ─────────────────────────────────
+    // ── Document viewer modal 
     const IMAGE_EXTS = ['jpg','jpeg','png','gif','bmp','webp','svg'];
 
     function setupImageZoom(img) {

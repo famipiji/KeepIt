@@ -7,10 +7,14 @@ const { Client }         = require('@elastic/elasticsearch');
 const pdfParse           = require('pdf-parse');
 const mammoth            = require('mammoth');
 const Tesseract          = require('tesseract.js');
-const { createCanvas }   = require('canvas');
+const { createCanvas, Image: CanvasImage } = require('canvas');
 const pdfjsLib           = require('pdfjs-dist/legacy/build/pdf.js');
 const fs                 = require('fs');
 const path               = require('path');
+const os                 = require('os');
+
+// Polyfill Image for pdfjs-dist — it uses `new Image()` internally for JPEG rendering
+if (!global.Image) global.Image = CanvasImage;
 
 // Absolute path (no file:// prefix — require() needs a plain path, not a URL)
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -34,29 +38,89 @@ async function extractText(buffer, filename) {
   const ext = filename.split('.').pop().toLowerCase();
   try {
     if (ext === 'pdf') {
-      //try native text extraction (fast, accurate for text-based PDFs)
-      const native = await pdfParse(buffer);
-      if (native.text.trim().length >= 50) {
-        console.log(`Extracted ${native.text.length} chars from PDF (native): ${filename}`);
-        return native.text;
+      try {
+        // native text extraction first
+        const native = await pdfParse(buffer);
+        const nativeText = (native.text || '').trim();
+
+        if (nativeText.length > 100) {
+          console.log(`Native PDF text (${nativeText.length} chars): ${filename}`);
+          return nativeText;
+        }
+
+        console.log(`Sparse text, running OCR: ${filename}`);
+
+        // avoids shared ArrayBuffer pool issues
+        const uint8Array = new Uint8Array(buffer);
+
+        // Factory that patches every context it creates so pdfjs internal
+        // temp-canvas drawImage calls also go through the workaround
+        const nodeCanvasFactory = {
+          create(w, h) {
+            const c   = createCanvas(w, h);
+            const ctx = c.getContext('2d');
+            nodeCanvasFactory._patch(ctx);
+            return { canvas: c, context: ctx };
+          },
+          reset(cc, w, h) { cc.canvas.width = w; cc.canvas.height = h; },
+          destroy(cc)     { cc.canvas.width = 0; cc.canvas.height = 0; },
+          _patch(ctx) {
+            const orig = ctx.drawImage.bind(ctx);
+            ctx.drawImage = function (src, ...a) {
+              if (src && src.data && src.width && src.height &&
+                  !(src instanceof CanvasImage)) {
+                const t = createCanvas(src.width, src.height);
+                const tc = t.getContext('2d');
+                const id = tc.createImageData(src.width, src.height);
+                id.data.set(new Uint8ClampedArray(
+                  ArrayBuffer.isView(src.data)
+                    ? src.data.buffer.slice(src.data.byteOffset, src.data.byteOffset + src.data.byteLength)
+                    : src.data
+                ));
+                tc.putImageData(id, 0, 0);
+                return orig(t, ...a);
+              }
+              return orig(src, ...a);
+            };
+          }
+        };
+
+        const pdf = await pdfjsLib.getDocument({ data: uint8Array, canvasFactory: nodeCanvasFactory }).promise;
+        let fullText = '';
+
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          console.log(`OCR page ${pageNum}/${pdf.numPages}: ${filename}`);
+
+          const page          = await pdf.getPage(pageNum);
+          const viewport      = page.getViewport({ scale: 2.0 });
+          const { canvas, context } = nodeCanvasFactory.create(
+            Math.floor(viewport.width), Math.floor(viewport.height)
+          );
+
+          await page.render({ canvasContext: context, viewport, canvasFactory: nodeCanvasFactory }).promise;
+
+          const tempPath = path.join(os.tmpdir(), `keepit_${Date.now()}_${pageNum}.png`);
+          fs.writeFileSync(tempPath, canvas.toBuffer('image/png'));
+
+          try {
+            const { data: { text } } = await Tesseract.recognize(
+              tempPath, 'eng',
+              { logger: () => {}, langPath: __dirname }
+            );
+            fullText += text + '\n';
+          } finally {
+            fs.unlink(tempPath, () => {});
+          }
+        }
+
+        const cleaned = fullText.trim();
+        console.log(`OCR PDF text (${cleaned.length} chars): ${filename}`);
+        return cleaned || '';
+
+      } catch (err) {
+        console.error(`PDF extraction failed for ${filename}:`, err.message);
+        return '';
       }
-      //scanned / image-only PDF — render each page and OCR it
-      console.log(`Low native text, switching to OCR for: ${filename}`);
-      const uint8Array = new Uint8Array(buffer);
-      const pdf        = await pdfjsLib.getDocument({ data: uint8Array, useSystemFonts: true }).promise;
-      let fullText     = '';
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page     = await pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas   = createCanvas(viewport.width, viewport.height);
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-        const { data: { text } } = await Tesseract.recognize(
-          canvas.toBuffer('image/png'), 'eng', { logger: () => {} }
-        );
-        fullText += text + '\n';
-      }
-      console.log(`Extracted ${fullText.length} chars from PDF (OCR): ${filename}`);
-      return fullText;
     }
     if (ext === 'docx') {
       const result = await mammoth.extractRawText({ buffer });
