@@ -225,9 +225,6 @@
       background: #ffffff;
       border-radius: 12px;
       box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-      overflow-y: auto;
-      max-height: 490px;
-      margin-bottom: 36px;
     }
 
     .doc-link {
@@ -261,9 +258,6 @@
       background: #ffffff;
       border-radius: 12px;
       box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-      overflow-y: auto;
-      max-height: 315px;
-      margin-bottom: 40px;
     }
 
     table {
@@ -284,10 +278,52 @@
       text-transform: uppercase;
       letter-spacing: 0.6px;
       border-bottom: 1px solid #e5e7eb;
-      position: sticky;
-      top: 0;
       background: #f9fafb;
-      z-index: 1;
+    }
+
+    /* Pagination */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      padding: 14px 4px;
+      margin-bottom: 36px;
+    }
+
+    .pagination .pg-info {
+      font-size: 0.82rem;
+      color: #6b7280;
+      padding: 0 8px;
+    }
+
+    .pagination .pg-btn {
+      background: #ffffff;
+      border: 1.5px solid #e5e7eb;
+      color: #374151;
+      padding: 5px 11px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      line-height: 1.4;
+    }
+
+    .pagination .pg-btn:hover:not(:disabled) {
+      background: #f3f4f6;
+      border-color: #d1d5db;
+    }
+
+    .pagination .pg-btn.active {
+      background: #4f46e5;
+      border-color: #4f46e5;
+      color: #ffffff;
+    }
+
+    .pagination .pg-btn:disabled {
+      opacity: 0.4;
+      cursor: default;
     }
 
     tbody tr {
@@ -537,14 +573,68 @@
       flex-direction: column;
     }
 
+    /* Image zoom container */
+    .zoom-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      cursor: zoom-in;
+      background: #f9fafb;
+      min-height: 300px;
+      user-select: none;
+    }
+
+    .zoom-container.zoomed { cursor: grab; }
+    .zoom-container.dragging { cursor: grabbing; }
+
     /* Image preview */
     .modal-body .preview-img {
       max-width: 100%;
-      max-height: 70vh;
+      max-height: 62vh;
       display: block;
-      margin: auto;
-      padding: 20px;
       object-fit: contain;
+      pointer-events: none;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
+    /* Zoom controls bar */
+    .zoom-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-top: 1px solid #e5e7eb;
+      background: #f9fafb;
+      flex-shrink: 0;
+    }
+
+    .zoom-controls .zoom-btn {
+      background: #ffffff;
+      border: 1.5px solid #e5e7eb;
+      color: #374151;
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .zoom-controls .zoom-btn:hover { background: #f3f4f6; }
+
+    .zoom-controls .zoom-level {
+      font-size: 0.82rem;
+      color: #6b7280;
+      min-width: 46px;
+      text-align: center;
     }
 
     /* PDF / iframe preview */
@@ -662,6 +752,7 @@
         <tbody id="docGrid"></tbody>
       </table>
     </div>
+    <div class="pagination" id="docsPagination"></div>
 
     <!-- Recent Activity -->
     <div class="section-header">
@@ -680,6 +771,7 @@
         <tbody id="activityBody"></tbody>
       </table>
     </div>
+    <div class="pagination" id="activityPagination"></div>
 
   </div>
 
@@ -733,6 +825,57 @@
 
     // ── Document store ────────────────────────────────────────
     let documents = [];
+    let docsPage = 1;
+    const DOCS_PER_PAGE = 7;
+
+    function pageRange(current, total) {
+      if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+      if (current <= 4) return [1, 2, 3, 4, 5, '...', total];
+      if (current >= total - 3) return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+      return [1, '...', current - 1, current, current + 1, '...', total];
+    }
+
+    function buildPagination(containerId, currentPage, totalPages, totalItems, perPage, onPageChange) {
+      const pg = document.getElementById(containerId);
+      pg.innerHTML = '';
+      if (totalPages <= 1) return;
+
+      const info = document.createElement('span');
+      info.className = 'pg-info';
+      const s = (currentPage - 1) * perPage + 1;
+      const e = Math.min(currentPage * perPage, totalItems);
+      info.textContent = `${s}–${e} of ${totalItems}`;
+      pg.appendChild(info);
+
+      const prev = document.createElement('button');
+      prev.className = 'pg-btn';
+      prev.textContent = '‹ Prev';
+      prev.disabled = currentPage === 1;
+      prev.addEventListener('click', () => onPageChange(currentPage - 1));
+      pg.appendChild(prev);
+
+      pageRange(currentPage, totalPages).forEach(p => {
+        if (p === '...') {
+          const span = document.createElement('span');
+          span.className = 'pg-info';
+          span.textContent = '…';
+          pg.appendChild(span);
+        } else {
+          const btn = document.createElement('button');
+          btn.className = 'pg-btn' + (p === currentPage ? ' active' : '');
+          btn.textContent = p;
+          btn.addEventListener('click', () => onPageChange(p));
+          pg.appendChild(btn);
+        }
+      });
+
+      const next = document.createElement('button');
+      next.className = 'pg-btn';
+      next.textContent = 'Next ›';
+      next.disabled = currentPage === totalPages;
+      next.addEventListener('click', () => onPageChange(currentPage + 1));
+      pg.appendChild(next);
+    }
 
     function renderDocs(filter) {
       const tbody = document.getElementById('docGrid');
@@ -742,6 +885,12 @@
         ? documents.filter(d => d.name.toLowerCase().includes(query))
         : documents;
 
+      const totalPages = Math.max(1, Math.ceil(filtered.length / DOCS_PER_PAGE));
+      if (docsPage > totalPages) docsPage = totalPages;
+
+      const start = (docsPage - 1) * DOCS_PER_PAGE;
+      const pageItems = filtered.slice(start, start + DOCS_PER_PAGE);
+
       tbody.innerHTML = '';
 
       if (filtered.length === 0) {
@@ -749,10 +898,11 @@
           ? 'No documents uploaded yet. Click "Upload Document" to get started.'
           : 'No documents match your search.';
         tbody.innerHTML = `<tr class="no-results"><td colspan="6">${msg}</td></tr>`;
+        buildPagination('docsPagination', 1, 0, 0, DOCS_PER_PAGE, () => {});
         return;
       }
 
-      filtered.forEach(doc => {
+      pageItems.forEach(doc => {
         const ext  = doc.name.split('.').pop().toLowerCase();
         const date = doc.uploaded_at
           ? new Date(doc.uploaded_at).toLocaleDateString('en-GB')
@@ -785,6 +935,11 @@
         });
 
         tbody.appendChild(tr);
+      });
+
+      buildPagination('docsPagination', docsPage, totalPages, filtered.length, DOCS_PER_PAGE, (p) => {
+        docsPage = p;
+        renderDocs(document.getElementById('searchInput').value);
       });
     }
 
@@ -846,29 +1001,10 @@
     // ── Search ────────────────────────────────────────────────
     document.getElementById('searchInput').addEventListener('input', function () {
       const q = this.value.toLowerCase();
-
+      docsPage = 1;
       renderDocs(q);
-
-      const rows = document.querySelectorAll('#activityBody tr[data-item]');
-      let anyVisible = false;
-      rows.forEach(row => {
-        const match = row.dataset.item.toLowerCase().includes(q);
-        row.style.display = match ? '' : 'none';
-        if (match) anyVisible = true;
-      });
-
-      const noResultsRow = document.getElementById('noResultsRow');
-      if (!anyVisible && q) {
-        if (!noResultsRow) {
-          const tr = document.createElement('tr');
-          tr.id = 'noResultsRow';
-          tr.className = 'no-results';
-          tr.innerHTML = '<td colspan="4">No activity matches your search.</td>';
-          document.getElementById('activityBody').appendChild(tr);
-        }
-      } else if (noResultsRow) {
-        noResultsRow.remove();
-      }
+      activityPage = 1;
+      renderActivity(q);
     });
 
     // ── Toast ─────────────────────────────────────────────────
@@ -882,33 +1018,61 @@
     }
 
     // ── Load activity from MySQL ──────────────────────────────
+    let activityData = [];
+    let activityPage = 1;
+    const ACTIVITY_PER_PAGE = 5;
+
+    function renderActivity(filter) {
+      const tbody = document.getElementById('activityBody');
+      const q = (filter || '').toLowerCase();
+
+      const filtered = q
+        ? activityData.filter(row => row.item.toLowerCase().includes(q))
+        : activityData;
+
+      const totalPages = Math.max(1, Math.ceil(filtered.length / ACTIVITY_PER_PAGE));
+      if (activityPage > totalPages) activityPage = totalPages;
+
+      const start = (activityPage - 1) * ACTIVITY_PER_PAGE;
+      const pageItems = filtered.slice(start, start + ACTIVITY_PER_PAGE);
+
+      tbody.innerHTML = '';
+
+      if (filtered.length === 0) {
+        const msg = q ? 'No activity matches your search.' : 'No activity records found.';
+        tbody.innerHTML = `<tr class="no-results"><td colspan="4">${msg}</td></tr>`;
+        buildPagination('activityPagination', 1, 0, 0, ACTIVITY_PER_PAGE, () => {});
+        return;
+      }
+
+      const badgeClass = { Completed: 'success', Pending: 'pending', Failed: 'failed' };
+
+      pageItems.forEach((row, i) => {
+        const date = new Date(row.created_at).toISOString().split('T')[0];
+        const cls  = badgeClass[row.status] || 'pending';
+        const tr   = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${start + i + 1}</td>
+          <td>${row.item}</td>
+          <td>${date}</td>
+          <td><span class="badge ${cls}">${row.status}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      buildPagination('activityPagination', activityPage, totalPages, filtered.length, ACTIVITY_PER_PAGE, (p) => {
+        activityPage = p;
+        renderActivity(document.getElementById('searchInput').value);
+      });
+    }
+
     async function loadActivity() {
       try {
         const res  = await fetch(`${API}/api/activity`);
         const data = await res.json();
-        const tbody = document.getElementById('activityBody');
-        tbody.innerHTML = '';
-
-        if (data.length === 0) {
-          tbody.innerHTML = '<tr class="no-results"><td colspan="4">No activity records found.</td></tr>';
-          return;
-        }
-
-        const badgeClass = { Completed: 'success', Pending: 'pending', Failed: 'failed' };
-
-        data.forEach((row, i) => {
-          const date = new Date(row.created_at).toISOString().split('T')[0];
-          const cls  = badgeClass[row.status] || 'pending';
-          const tr   = document.createElement('tr');
-          tr.dataset.item = row.item;
-          tr.innerHTML = `
-            <td>${i + 1}</td>
-            <td>${row.item}</td>
-            <td>${date}</td>
-            <td><span class="badge ${cls}">${row.status}</span></td>
-          `;
-          tbody.appendChild(tr);
-        });
+        activityData = data;
+        activityPage = 1;
+        renderActivity(document.getElementById('searchInput').value);
       } catch {
         showToast('Could not load activity');
       }
@@ -916,6 +1080,91 @@
 
     // ── Document viewer modal ─────────────────────────────────
     const IMAGE_EXTS = ['jpg','jpeg','png','gif','bmp','webp','svg'];
+
+    function setupImageZoom(img) {
+      const container = document.createElement('div');
+      container.className = 'zoom-container';
+
+      const controls = document.createElement('div');
+      controls.className = 'zoom-controls';
+
+      let scale = 1, tx = 0, ty = 0;
+      let isDragging = false, dragStartX, dragStartY;
+
+      const zoomLevel = document.createElement('span');
+      zoomLevel.className = 'zoom-level';
+      zoomLevel.textContent = '100%';
+
+      function applyTransform(animate) {
+        img.style.transition = animate ? 'transform 0.18s ease-out' : 'none';
+        img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+        zoomLevel.textContent = Math.round(scale * 100) + '%';
+        container.classList.toggle('zoomed', scale > 1);
+      }
+
+      function resetZoom() {
+        scale = 1; tx = 0; ty = 0;
+        applyTransform(true);
+      }
+
+      function clampScale(s) { return Math.min(Math.max(0.25, s), 8); }
+
+      // Wheel zoom toward cursor
+      container.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = container.getBoundingClientRect();
+        const mx = e.clientX - rect.left - rect.width / 2 - tx;
+        const my = e.clientY - rect.top - rect.height / 2 - ty;
+        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+        const newScale = clampScale(scale * factor);
+        tx -= mx * (newScale / scale - 1);
+        ty -= my * (newScale / scale - 1);
+        scale = newScale;
+        applyTransform(false);
+      }, { passive: false });
+
+      // Drag to pan
+      container.addEventListener('mousedown', (e) => {
+        if (scale <= 1) return;
+        e.preventDefault();
+        isDragging = true;
+        dragStartX = e.clientX - tx;
+        dragStartY = e.clientY - ty;
+        container.classList.add('dragging');
+      });
+
+      const onMove = (e) => {
+        if (!isDragging) return;
+        tx = e.clientX - dragStartX;
+        ty = e.clientY - dragStartY;
+        applyTransform(false);
+      };
+      const onUp = () => { isDragging = false; container.classList.remove('dragging'); };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+
+      // Double-click to reset
+      container.addEventListener('dblclick', resetZoom);
+
+      // Buttons
+      const btnMinus = document.createElement('button');
+      btnMinus.className = 'zoom-btn'; btnMinus.title = 'Zoom out'; btnMinus.textContent = '−';
+      btnMinus.addEventListener('click', () => { scale = clampScale(scale / 1.25); if (scale <= 1) { tx = 0; ty = 0; } applyTransform(true); });
+
+      const btnPlus = document.createElement('button');
+      btnPlus.className = 'zoom-btn'; btnPlus.title = 'Zoom in'; btnPlus.textContent = '+';
+      btnPlus.addEventListener('click', () => { scale = clampScale(scale * 1.25); applyTransform(true); });
+
+      const btnReset = document.createElement('button');
+      btnReset.className = 'zoom-btn'; btnReset.title = 'Reset zoom'; btnReset.textContent = '↺';
+      btnReset.addEventListener('click', resetZoom);
+
+      controls.append(btnMinus, zoomLevel, btnPlus, btnReset);
+      container.appendChild(img);
+      container._cleanup = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+
+      return { container, controls };
+    }
     const TEXT_EXTS  = ['txt','csv','md'];
     const OFFICE_EXTS = ['doc','docx','xls','xlsx','ppt','pptx'];
 
@@ -942,7 +1191,10 @@
         img.className = 'preview-img';
         img.src       = `${API}/api/documents/${doc.id}/view`;
         img.alt       = doc.name;
-        body.appendChild(img);
+        img.draggable = false;
+        const { container, controls } = setupImageZoom(img);
+        body.appendChild(container);
+        body.appendChild(controls);
 
       } else if (ext === 'pdf') {
         const iframe = document.createElement('iframe');
@@ -978,7 +1230,10 @@
     function closeDocModal() {
       const modal = document.getElementById('docModal');
       modal.classList.remove('open');
-      document.getElementById('modalBody').innerHTML = '';
+      const body = document.getElementById('modalBody');
+      const zc = body.querySelector('.zoom-container');
+      if (zc && zc._cleanup) zc._cleanup();
+      body.innerHTML = '';
     }
 
     document.getElementById('modalCloseBtn').addEventListener('click', closeDocModal);
