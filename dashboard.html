@@ -657,6 +657,34 @@
       background: #ffffff;
     }
 
+    /* Drag & drop overlay */
+    .drop-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(79, 70, 229, 0.10);
+      border: 4px dashed #4f46e5;
+      z-index: 2000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      pointer-events: none;
+    }
+
+    .drop-overlay.active { display: flex; }
+
+    .drop-overlay .drop-icon  { font-size: 3.5rem; }
+    .drop-overlay .drop-label {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #4f46e5;
+    }
+    .drop-overlay .drop-sub {
+      font-size: 0.9rem;
+      color: #6b7280;
+    }
+
     /* No preview */
     .modal-body .preview-none {
       display: flex;
@@ -785,6 +813,13 @@
     </div>
   </div>
 
+  <!-- Drag & drop overlay -->
+  <div class="drop-overlay" id="dropOverlay">
+    <div class="drop-icon">📂</div>
+    <div class="drop-label">Drop files to upload</div>
+    <div class="drop-sub">Release to start uploading</div>
+  </div>
+
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
@@ -802,17 +837,7 @@
     });
 
     // ── File icon helper ──────────────────────────────────────
-    function getFileIcon(name) {
-      const ext = name.split('.').pop().toLowerCase();
-      const map = {
-        pdf: '📄', jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️',
-        bmp: '🖼️', webp: '🖼️', svg: '🖼️', doc: '📝', docx: '📝',
-        xls: '📊', xlsx: '📊', ppt: '📋', pptx: '📋', txt: '📃',
-        csv: '📊', zip: '🗜️', rar: '🗜️'
-      };
-      return map[ext] || '📁';
-    }
-
+    
     function formatSize(bytes) {
       if (bytes < 1024) return bytes + ' B';
       if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -961,16 +986,9 @@
     }
 
     // ── Upload to MySQL ───────────────────────────────────────
-    document.getElementById('uploadBtn').addEventListener('click', () => {
-      document.getElementById('fileInput').click();
-    });
-
-    document.getElementById('fileInput').addEventListener('change', async function () {
-      const files = Array.from(this.files);
-      if (files.length === 0) return;
-
+    async function uploadFiles(files) {
+      if (!files.length) return;
       showToast('Uploading...');
-
       for (const file of files) {
         const formData = new FormData();
         formData.append('file', file);
@@ -983,15 +1001,46 @@
           showToast('Failed to upload: ' + file.name);
         }
       }
-
       updateStats();
       renderDocs(document.getElementById('searchInput').value);
-      showToast(files.length === 1
-        ? 'Uploaded: ' + files[0].name
-        : files.length + ' files uploaded');
+      showToast(files.length === 1 ? 'Uploaded: ' + files[0].name : files.length + ' files uploaded');
       loadActivity();
+    }
 
+    document.getElementById('uploadBtn').addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+
+    document.getElementById('fileInput').addEventListener('change', async function () {
+      const files = Array.from(this.files);
       this.value = '';
+      await uploadFiles(files);
+    });
+
+    // ── Drag & drop ───────────────────────────────────────────
+    let dragCounter = 0;
+    const dropOverlay = document.getElementById('dropOverlay');
+
+    document.addEventListener('dragenter', (e) => {
+      if (!e.dataTransfer.types.includes('Files')) return;
+      dragCounter++;
+      dropOverlay.classList.add('active');
+    });
+
+    document.addEventListener('dragleave', () => {
+      if (--dragCounter <= 0) {
+        dragCounter = 0;
+        dropOverlay.classList.remove('active');
+      }
+    });
+
+    document.addEventListener('dragover', (e) => e.preventDefault());
+
+    document.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      dropOverlay.classList.remove('active');
+      await uploadFiles(Array.from(e.dataTransfer.files));
     });
 
     // ── Search ────────────────────────────────────────────────
