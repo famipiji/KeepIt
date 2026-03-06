@@ -103,6 +103,84 @@
     .btn-login:active {
       transform: scale(0.98);
     }
+
+    /* Register modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .reg-card {
+      background: #ffffff;
+      padding: 40px 36px;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      width: 100%;
+      max-width: 380px;
+      position: relative;
+    }
+
+    .reg-card h2 {
+      font-size: 1.4rem;
+      color: #1a1a2e;
+      margin-bottom: 6px;
+    }
+
+    .reg-card p {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-bottom: 24px;
+    }
+
+    .btn-close-modal {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      background: none;
+      border: none;
+      font-size: 1.2rem;
+      color: #9ca3af;
+      cursor: pointer;
+    }
+
+    .btn-close-modal:hover { color: #374151; }
+
+    .btn-register {
+      width: 100%;
+      padding: 13px;
+      background: #4f46e5;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 4px;
+    }
+
+    .btn-register:hover  { background: #4338ca; }
+    .btn-register:active { transform: scale(0.98); }
+
+    .reg-success {
+      display: none;
+      background: #f0fdf4;
+      color: #16a34a;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.875rem;
+      margin-bottom: 16px;
+    }
   </style>
 </head>
 <body>
@@ -121,8 +199,41 @@
         <label for="password">Password</label>
         <input type="password" id="password" placeholder="Enter your password" autocomplete="current-password" />
       </div>
+      <div style="text-align: right; margin-bottom: 20px; white-space: nowrap;">
+        <span style="font-size: 0.875rem; color: #6b7280;">Don't have an account?</span>
+        <a href="#" id="openRegister" style="font-size: 0.875rem; color: #4f46e5; text-decoration: none; margin-left: 4px;">Sign Up</a>
+        <span style="margin: 0 8px; color: #6b7280;">|</span>
+        <a href="#" style="font-size: 0.875rem; color: #4f46e5; text-decoration: none;">Forgot password?</a>
+      </div>
+
       <button type="submit" class="btn-login">Sign In</button>
     </form>
+  </div>
+
+  <!-- Register modal -->
+  <div class="modal-backdrop" id="registerModal">
+    <div class="reg-card">
+      <button class="btn-close-modal" id="closeRegister">&#10005;</button>
+      <h2>Create Account</h2>
+      <p>Fill in the details below to register.</p>
+      <div class="reg-success" id="regSuccess">Account created! You can now sign in.</div>
+      <div class="error-msg" id="regError" style="display:none"></div>
+      <form id="registerForm">
+        <div class="form-group">
+          <label for="regUsername">Username</label>
+          <input type="text" id="regUsername" placeholder="At least 3 characters" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="regPassword">Password</label>
+          <input type="password" id="regPassword" placeholder="At least 6 characters" />
+        </div>
+        <div class="form-group">
+          <label for="regConfirm">Confirm Password</label>
+          <input type="password" id="regConfirm" placeholder="Repeat your password" />
+        </div>
+        <button type="submit" class="btn-register">Create Account</button>
+      </form>
+    </div>
   </div>
 
   <script>
@@ -159,6 +270,68 @@
 
     document.getElementById('username').addEventListener('input', () => errorMsg.style.display = 'none');
     document.getElementById('password').addEventListener('input', () => errorMsg.style.display = 'none');
+
+    // ── Register modal ────────────────────────────────────────
+    const modal     = document.getElementById('registerModal');
+    const regForm   = document.getElementById('registerForm');
+    const regError  = document.getElementById('regError');
+    const regSuccess = document.getElementById('regSuccess');
+    const regBtn    = regForm.querySelector('button[type="submit"]');
+
+    function openModal()  { modal.classList.add('open'); }
+    function closeModal() {
+      modal.classList.remove('open');
+      regForm.reset();
+      regError.style.display = 'none';
+      regSuccess.style.display = 'none';
+      regBtn.disabled = false;
+      regBtn.textContent = 'Create Account';
+    }
+
+    document.getElementById('openRegister').addEventListener('click', e => { e.preventDefault(); openModal(); });
+    document.getElementById('closeRegister').addEventListener('click', closeModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+    regForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      regError.style.display = 'none';
+      regSuccess.style.display = 'none';
+
+      const username = document.getElementById('regUsername').value.trim();
+      const password = document.getElementById('regPassword').value;
+      const confirm  = document.getElementById('regConfirm').value;
+
+      if (password !== confirm) {
+        regError.textContent = 'Passwords do not match.';
+        regError.style.display = 'block';
+        return;
+      }
+
+      regBtn.disabled = true;
+      regBtn.textContent = 'Creating...';
+
+      try {
+        const res  = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Registration failed');
+        regSuccess.style.display = 'block';
+        regForm.reset();
+        setTimeout(closeModal, 2000);
+      } catch (err) {
+        regError.textContent = err.message;
+        regError.style.display = 'block';
+        regBtn.disabled = false;
+        regBtn.textContent = 'Create Account';
+      }
+    });
+
+    ['regUsername','regPassword','regConfirm'].forEach(id => {
+      document.getElementById(id).addEventListener('input', () => regError.style.display = 'none');
+    });
   </script>
 </body>
 </html>

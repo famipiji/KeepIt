@@ -28,6 +28,21 @@ const EXTRACTS = path.join(__dirname, 'extracts');
 // Ensure extracts folder exists
 if (!fs.existsSync(EXTRACTS)) fs.mkdirSync(EXTRACTS);
 
+// ── Auth helpers ──────────────────────────────────────────────
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 32).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  try {
+    const [salt, hash] = stored.split(':');
+    const derived = crypto.scryptSync(password, salt, 32);
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), derived);
+  } catch (_) { return false; }
+}
+
 // ── Auth ──────────────────────────────────────────────────────
 const sessions   = new Map(); // token -> { user, expires }
 const loginAttempts = new Map(); // ip -> { count, resetAt }
@@ -97,20 +112,34 @@ app.post('/api/login', (req, res) => {
   attempt.count++;
 
   const { username, password } = req.body;
-  const validUser = process.env.AUTH_USER || '';
-  const validPass = process.env.AUTH_PASS || '';
-  let ok = false;
-  try {
-    const uMatch = crypto.timingSafeEqual(Buffer.from(username || ''), Buffer.from(validUser));
-    const pMatch = crypto.timingSafeEqual(Buffer.from(password || ''), Buffer.from(validPass));
-    ok = uMatch && pMatch;
-  } catch (_) {}
-  if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+  if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
 
-  loginAttempts.delete(ip); // reset on success
-  const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, { user: username, expires: Date.now() + 8 * 60 * 60 * 1000 }); // 8h
-  res.json({ token, username });
+  db.query('SELECT password_hash FROM users WHERE username = ?', [username], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Server error' });
+    if (rows.length === 0 || !verifyPassword(password, rows[0].password_hash)) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    loginAttempts.delete(ip);
+    const token = crypto.randomBytes(32).toString('hex');
+    sessions.set(token, { user: username, expires: Date.now() + 8 * 60 * 60 * 1000 }); // 8h
+    res.json({ token, username });
+  });
+});
+
+app.post('/api/register', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
+  if (username.length < 3)    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  if (password.length < 6)    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+  const hash = hashPassword(password);
+  db.query('INSERT INTO users (username, password_hash) VALUES (?, ?)', [username, hash], (err) => {
+    if (err) {
+      if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Username already taken' });
+      return res.status(500).json({ error: 'Server error' });
+    }
+    res.json({ success: true });
+  });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -264,6 +293,26 @@ db.query('SELECT 1', err => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, err => { if (err) console.error('Error creating activity table:', err); });
+
+  db.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id            INT AUTO_INCREMENT PRIMARY KEY,
+      username      VARCHAR(100) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `, err => {
+    if (err) { console.error('Error creating users table:', err); return; }
+    // Seed initial user from .env if table is empty
+    db.query('SELECT COUNT(*) AS count FROM users', (err, rows) => {
+      if (err || rows[0].count > 0) return;
+      const hash = hashPassword(process.env.AUTH_PASS || '123');
+      db.query('INSERT INTO users (username, password_hash) VALUES (?, ?)',
+        [process.env.AUTH_USER || 'user', hash],
+        err => { if (err) console.error('Failed to seed initial user:', err); else console.log('Seeded initial user from .env'); }
+      );
+    });
+  });
 
   // ── Elasticsearch index setup ───────────────────────────────
   esClient.indices.create({
