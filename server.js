@@ -29,7 +29,21 @@ const EXTRACTS = path.join(__dirname, 'extracts');
 if (!fs.existsSync(EXTRACTS)) fs.mkdirSync(EXTRACTS);
 
 // ── Auth ──────────────────────────────────────────────────────
-const sessions = new Map(); // token -> { user, expires }
+const sessions   = new Map(); // token -> { user, expires }
+const loginAttempts = new Map(); // ip -> { count, resetAt }
+const MAX_ATTEMPTS  = 10;
+const WINDOW_MS     = 15 * 60 * 1000; // 15 minutes
+
+// Purge expired sessions every 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, s] of sessions) {
+    if (s.expires < now) sessions.delete(token);
+  }
+  for (const [ip, a] of loginAttempts) {
+    if (a.resetAt < now) loginAttempts.delete(ip);
+  }
+}, 30 * 60 * 1000);
 
 function authRequired(req, res, next) {
   const header = req.headers['authorization'] || '';
@@ -67,6 +81,21 @@ app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'login.html')));
 
 // ── Login / Logout (public) ───────────────────────────────────
 app.post('/api/login', (req, res) => {
+  const ip = req.ip;
+  const now = Date.now();
+
+  // Rate limit: block after MAX_ATTEMPTS in WINDOW_MS
+  let attempt = loginAttempts.get(ip);
+  if (!attempt || attempt.resetAt < now) {
+    attempt = { count: 0, resetAt: now + WINDOW_MS };
+    loginAttempts.set(ip, attempt);
+  }
+  if (attempt.count >= MAX_ATTEMPTS) {
+    const wait = Math.ceil((attempt.resetAt - now) / 60000);
+    return res.status(429).json({ error: `Too many attempts. Try again in ${wait} minute(s).` });
+  }
+  attempt.count++;
+
   const { username, password } = req.body;
   const validUser = process.env.AUTH_USER || '';
   const validPass = process.env.AUTH_PASS || '';
@@ -77,6 +106,8 @@ app.post('/api/login', (req, res) => {
     ok = uMatch && pMatch;
   } catch (_) {}
   if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+
+  loginAttempts.delete(ip); // reset on success
   const token = crypto.randomBytes(32).toString('hex');
   sessions.set(token, { user: username, expires: Date.now() + 8 * 60 * 60 * 1000 }); // 8h
   res.json({ token, username });
@@ -198,15 +229,19 @@ async function extractText(buffer, filename) {
   return '';
 }
 
-// ── MySQL connection ──────────────────────────────────────────
-const db = mysql.createConnection({
-  host:     process.env.DB_HOST,
-  user:     process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME
+// ── MySQL connection pool ─────────────────────────────────────
+const db = mysql.createPool({
+  host:            process.env.DB_HOST,
+  user:            process.env.DB_USER,
+  password:        process.env.DB_PASSWORD,
+  database:        process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit:    10,
+  queueLimit:         0
 });
 
-db.connect(err => {
+// Verify connectivity and bootstrap tables
+db.query('SELECT 1', err => {
   if (err) { console.error('MySQL connection failed:', err); process.exit(1); }
   console.log('Connected to MySQL');
 

@@ -110,7 +110,7 @@
     <h1>Welcome Back</h1>
     <p class="subtitle">Sign in to your account</p>
 
-    <div class="error-msg" id="errorMsg">Invalid username or password.</div>
+    <div class="error-msg" id="errorMsg"></div>
 
     <form id="loginForm">
       <div class="form-group">
@@ -149,7 +149,8 @@
         sessionStorage.setItem('authToken', data.token);
         sessionStorage.setItem('authUser', data.username);
         window.location.href = 'dashboard.html';
-      } catch {
+      } catch (err) {
+        errorMsg.textContent = err.message || 'Invalid username or password.';
         errorMsg.style.display = 'block';
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign In';
