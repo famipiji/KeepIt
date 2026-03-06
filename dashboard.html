@@ -533,6 +533,24 @@
       word-break: break-word;
     }
 
+    .result-card .rc-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .result-card .rc-match-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #4f46e5;
+      background: #ede9fe;
+      border-radius: 20px;
+      padding: 1px 8px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
     .result-card .rc-snippet em {
       background: #fef08a;
       color: #1a1a2e;
@@ -1424,15 +1442,21 @@
             return;
           }
 
-          header.textContent = `${hits.length} result${hits.length === 1 ? '' : 's'} for "${q}"`;
+          header.textContent = `${hits.length} result${hits.length === 1 ? '' : 's'} for "${q}" — sorted by keyword frequency`;
 
           hits.forEach(hit => {
             const card = document.createElement('div');
             card.className = 'result-card';
+            const badgeLabel = hit.matchCount === 1
+              ? '1 match'
+              : `${hit.matchCount} matches`;
             card.innerHTML = `
               <div class="rc-icon"></div>
               <div class="rc-body">
-                <div class="rc-name">${hit.name}</div>
+                <div class="rc-meta">
+                  <div class="rc-name">${hit.name}</div>
+                  ${hit.matchCount > 0 ? `<span class="rc-match-badge">${badgeLabel}</span>` : ''}
+                </div>
                 <div class="rc-snippet">${hit.snippet || '<em>No preview available</em>'}</div>
               </div>
             `;

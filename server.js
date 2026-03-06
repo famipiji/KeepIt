@@ -282,16 +282,37 @@ app.get('/api/search/content', async (req, res) => {
   try {
     const result = await esClient.search({
       index: 'documents',
+      size: 50,
       query: { multi_match: { query: q, fields: ['name', 'content'] } },
       highlight: {
         fields: { content: { fragment_size: 160, number_of_fragments: 1 } }
       }
     });
-    const hits = result.hits.hits.map(h => ({
-      id:      h._source.doc_id,
-      name:    h._source.name,
-      snippet: h.highlight?.content?.[0] ?? ''
-    }));
+
+    const keyword = q.toLowerCase();
+    const hits = result.hits.hits.map(h => {
+      const docId = h._source.doc_id;
+      let matchCount = 0;
+      try {
+        const extractPath = path.join(EXTRACTS, `${docId}.txt`);
+        if (fs.existsSync(extractPath)) {
+          const text = fs.readFileSync(extractPath, 'utf-8').toLowerCase();
+          let pos = 0;
+          while ((pos = text.indexOf(keyword, pos)) !== -1) {
+            matchCount++;
+            pos += keyword.length;
+          }
+        }
+      } catch (_) { /* ignore */ }
+      return {
+        id:         docId,
+        name:       h._source.name,
+        snippet:    h.highlight?.content?.[0] ?? '',
+        matchCount
+      };
+    });
+
+    hits.sort((a, b) => b.matchCount - a.matchCount);
     res.json(hits);
   } catch (e) {
     res.status(500).json({ error: e.message });
