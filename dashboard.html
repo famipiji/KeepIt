@@ -235,6 +235,28 @@
       background: #f9fafb;
     }
 
+    thead th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    thead th.sortable:hover {
+      color: #4f46e5;
+    }
+
+    thead th .sort-icon {
+      display: inline-block;
+      margin-left: 4px;
+      opacity: 0.35;
+      font-size: 0.7rem;
+    }
+
+    thead th.sort-asc .sort-icon,
+    thead th.sort-desc .sort-icon {
+      opacity: 1;
+      color: #4f46e5;
+    }
+
     /* Pagination */
     .pagination {
       display: flex;
@@ -797,10 +819,10 @@
       <table>
         <thead>
           <tr>
-            <th>File Name</th>
-            <th>Latest Version</th>
+            <th class="sortable" data-col="name">File Name <span class="sort-icon">▲</span></th>
+            <th class="sortable" data-col="size">Size <span class="sort-icon">▲</span></th>
             <th>Extension</th>
-            <th>Created On</th>
+            <th class="sortable" data-col="uploaded_at">Created On <span class="sort-icon">▲</span></th>
             <th>Created By</th>
             <th></th>
           </tr>
@@ -896,10 +918,12 @@
       return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
-    // ── Document store 
+    // ── Document store
     let documents = [];
     let docsPage = 1;
     const DOCS_PER_PAGE = 5;
+    let sortCol = 'uploaded_at';
+    let sortDir = 'desc';
 
     function pageRange(current, total) {
       if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -950,13 +974,38 @@
       pg.appendChild(next);
     }
 
+    function updateSortHeaders() {
+      document.querySelectorAll('thead th.sortable').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+        const icon = th.querySelector('.sort-icon');
+        if (th.dataset.col === sortCol) {
+          th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+          icon.textContent = sortDir === 'asc' ? '▲' : '▼';
+        } else {
+          icon.textContent = '▲';
+        }
+      });
+    }
+
     function renderDocs(filter) {
       const tbody = document.getElementById('docGrid');
       const query = (filter || '').toLowerCase();
 
-      const filtered = query
+      let filtered = query
         ? documents.filter(d => d.name.toLowerCase().includes(query))
-        : documents;
+        : [...documents];
+
+      // Sort
+      filtered.sort((a, b) => {
+        let av = a[sortCol], bv = b[sortCol];
+        if (sortCol === 'name') { av = av.toLowerCase(); bv = bv.toLowerCase(); }
+        if (sortCol === 'uploaded_at') { av = new Date(av || 0); bv = new Date(bv || 0); }
+        if (av < bv) return sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      updateSortHeaders();
 
       const totalPages = Math.max(1, Math.ceil(filtered.length / DOCS_PER_PAGE));
       if (docsPage > totalPages) docsPage = totalPages;
@@ -983,7 +1032,7 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><span class="doc-link">${doc.name}</span></td>
-          <td>1</td>
+          <td>${formatSize(doc.size)}</td>
           <td>${ext}</td>
           <td>${date}</td>
           <td>${loggedInUser}</td>
@@ -994,6 +1043,7 @@
 
         tr.querySelector('.btn-remove-row').addEventListener('click', async (e) => {
           e.stopPropagation();
+          if (!confirm(`Delete "${doc.name}"?\nThis cannot be undone.`)) return;
           try {
             const res = await authFetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE' });
             if (!res.ok) throw new Error();
@@ -1033,6 +1083,21 @@
         showToast('Could not connect to server');
       }
     }
+
+    // ── Column sorting ────────────────────────────────────────
+    document.querySelectorAll('thead th.sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.col;
+        if (sortCol === col) {
+          sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortCol = col;
+          sortDir = 'asc';
+        }
+        docsPage = 1;
+        renderDocs(document.getElementById('searchInput').value);
+      });
+    });
 
     // ── Upload to MySQL ───────────────────────────────────────
     const upProgress  = document.getElementById('uploadProgress');
