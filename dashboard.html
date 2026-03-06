@@ -155,53 +155,6 @@
       display: none;
     }
 
-    /* Stats cards */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 20px;
-      margin-bottom: 36px;
-    }
-
-    .stat-card {
-      background: #ffffff;
-      border-radius: 12px;
-      padding: 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .stat-card .stat-label {
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-    }
-
-    .stat-card .stat-value {
-      font-size: 2rem;
-      font-weight: 700;
-      color: #1a1a2e;
-    }
-
-    .stat-card .stat-change {
-      font-size: 0.8rem;
-      color: #10b981;
-      font-weight: 500;
-    }
-
-    .stat-card .stat-change.down {
-      color: #ef4444;
-    }
-
-    .stat-card .icon {
-      font-size: 1.6rem;
-      margin-bottom: 4px;
-    }
-
     /* Documents section */
     .section-header {
       display: flex;
@@ -835,14 +788,6 @@
       <div id="csResultsList"></div>
     </div>
 
-    <!-- Stats -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-value" id="statTotal">0</div>
-        <div class="stat-change" id="statTotalHint">No files uploaded yet</div>
-      </div>
-    </div>
-
     <!-- Documents -->
     <div class="section-header">
       <span class="section-title">Uploaded Documents</span>
@@ -924,12 +869,22 @@
     const API = 'http://localhost:3000';
 
     // ── Auth guard ────────────────────────────────────────────
-    const loggedInUser = sessionStorage.getItem('loggedInUser');
-    if (!loggedInUser) window.location.href = 'login.html';
+    const authToken    = sessionStorage.getItem('authToken');
+    const loggedInUser = sessionStorage.getItem('authUser');
+    if (!authToken || !loggedInUser) window.location.href = 'login.html';
     document.getElementById('welcomeText').textContent = 'Welcome, ' + loggedInUser;
 
-    document.getElementById('logoutBtn').addEventListener('click', function () {
-      sessionStorage.removeItem('loggedInUser');
+    function authFetch(url, options = {}) {
+      return fetch(url, {
+        ...options,
+        headers: { ...(options.headers || {}), 'Authorization': 'Bearer ' + authToken }
+      });
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', async function () {
+      await authFetch(`${API}/api/logout`, { method: 'POST' }).catch(() => {});
+      sessionStorage.removeItem('authToken');
+      sessionStorage.removeItem('authUser');
       window.location.href = 'login.html';
     });
 
@@ -1040,7 +995,7 @@
         tr.querySelector('.btn-remove-row').addEventListener('click', async (e) => {
           e.stopPropagation();
           try {
-            const res = await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE' });
+            const res = await authFetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE' });
             if (!res.ok) throw new Error();
             documents = documents.filter(d => d.id !== doc.id);
             updateStats();
@@ -1063,16 +1018,13 @@
 
     function updateStats() {
       const total = documents.length;
-      document.getElementById('statTotal').textContent = total;
       document.getElementById('docCount').textContent = total + (total === 1 ? ' file' : ' files');
-      document.getElementById('statTotalHint').textContent =
-        total === 0 ? 'No files uploaded yet' : total + ' document' + (total === 1 ? '' : 's') + ' stored';
     }
 
     // ── Load documents from MySQL ─────────────────────────────
     async function loadDocuments() {
       try {
-        const res  = await fetch(`${API}/api/documents`);
+        const res  = await authFetch(`${API}/api/documents`);
         const data = await res.json();
         documents  = data.map(d => ({ id: d.id, name: d.name, size: d.size, uploaded_at: d.uploaded_at }));
         updateStats();
@@ -1110,7 +1062,7 @@
         const formData = new FormData();
         formData.append('file', file);
         try {
-          const res  = await fetch(`${API}/api/upload`, { method: 'POST', body: formData });
+          const res  = await authFetch(`${API}/api/upload`, { method: 'POST', body: formData });
           const data = await res.json();
           if (data.error) throw new Error(data.error);
           documents.push({ id: data.id, name: data.name, size: data.size });
@@ -1234,7 +1186,7 @@
 
     async function loadActivity() {
       try {
-        const res  = await fetch(`${API}/api/activity`);
+        const res  = await authFetch(`${API}/api/activity`);
         const data = await res.json();
         activityData = data;
         activityPage = 1;
@@ -1348,16 +1300,27 @@
       title.textContent = doc.name;
       body.innerHTML    = '';
 
-      // Wire download button
-      dlBtn.onclick = () => { window.location.href = `${API}/api/documents/${doc.id}`; };
+      // Wire download button — fetch with auth then trigger download via blob
+      dlBtn.onclick = async () => {
+        try {
+          const res  = await authFetch(`${API}/api/documents/${doc.id}`);
+          const blob = await res.blob();
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          a.href = url; a.download = doc.name;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        } catch { showToast('Download failed'); }
+      };
 
-      // Build preview content
+      // Build preview content — use blob URLs so auth header is sent
       if (IMAGE_EXTS.includes(ext)) {
         const img = document.createElement('img');
         img.className = 'preview-img';
-        img.src       = `${API}/api/documents/${doc.id}/view`;
         img.alt       = doc.name;
         img.draggable = false;
+        authFetch(`${API}/api/documents/${doc.id}/view`)
+          .then(r => r.blob()).then(b => { img.src = URL.createObjectURL(b); });
         const { container, controls } = setupImageZoom(img);
         body.appendChild(container);
         body.appendChild(controls);
@@ -1365,7 +1328,8 @@
       } else if (ext === 'pdf') {
         const iframe = document.createElement('iframe');
         iframe.className = 'preview-iframe';
-        iframe.src       = `${API}/api/documents/${doc.id}/view`;
+        authFetch(`${API}/api/documents/${doc.id}/view`)
+          .then(r => r.blob()).then(b => { iframe.src = URL.createObjectURL(b); });
         body.appendChild(iframe);
 
       } else if (TEXT_EXTS.includes(ext) || OFFICE_EXTS.includes(ext)) {
@@ -1374,7 +1338,7 @@
         pre.textContent = 'Loading...';
         body.appendChild(pre);
         try {
-          const res  = await fetch(`${API}/api/documents/${doc.id}/extract`);
+          const res  = await authFetch(`${API}/api/documents/${doc.id}/extract`);
           const text = await res.text();
           pre.textContent = res.ok ? text : 'No extracted text available for this document.';
         } catch {
@@ -1421,7 +1385,7 @@
 
       csDebounce = setTimeout(async () => {
         try {
-          const res  = await fetch(`${API}/api/search/content?q=${encodeURIComponent(q)}`);
+          const res  = await authFetch(`${API}/api/search/content?q=${encodeURIComponent(q)}`);
           const hits = await res.json();
 
           const container = document.getElementById('contentResults');

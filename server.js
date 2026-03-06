@@ -3,6 +3,7 @@ const express            = require('express');
 const mysql              = require('mysql2');
 const multer             = require('multer');
 const cors               = require('cors');
+const crypto             = require('crypto');
 const { Client }         = require('@elastic/elasticsearch');
 const pdfParse           = require('pdf-parse');
 const mammoth            = require('mammoth');
@@ -20,18 +21,76 @@ if (!global.Image) global.Image = CanvasImage;
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   require.resolve('pdfjs-dist/legacy/build/pdf.worker.js');
 
-const app        = express();
-const upload     = multer({ storage: multer.memoryStorage() });
-const esClient   = new Client({ node: process.env.ES_NODE || 'http://localhost:9200' });
-const EXTRACTS   = path.join(__dirname, 'extracts');
+const app      = express();
+const esClient = new Client({ node: process.env.ES_NODE || 'http://localhost:9200' });
+const EXTRACTS = path.join(__dirname, 'extracts');
 
 // Ensure extracts folder exists
 if (!fs.existsSync(EXTRACTS)) fs.mkdirSync(EXTRACTS);
+
+// ── Auth ──────────────────────────────────────────────────────
+const sessions = new Map(); // token -> { user, expires }
+
+function authRequired(req, res, next) {
+  const header = req.headers['authorization'] || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+  const session = token ? sessions.get(token) : null;
+  if (!session || session.expires < Date.now()) {
+    if (token) sessions.delete(token);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  req.user = session.user;
+  next();
+}
+
+// ── File upload config ────────────────────────────────────────
+const ALLOWED_MIME = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain', 'text/csv', 'text/markdown',
+  'image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'
+]);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME.has(file.mimetype)) cb(null, true);
+    else cb(new Error(`File type not allowed: ${file.mimetype}`));
+  }
+});
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'login.html')));
+
+// ── Login / Logout (public) ───────────────────────────────────
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  const validUser = process.env.AUTH_USER || '';
+  const validPass = process.env.AUTH_PASS || '';
+  let ok = false;
+  try {
+    const uMatch = crypto.timingSafeEqual(Buffer.from(username || ''), Buffer.from(validUser));
+    const pMatch = crypto.timingSafeEqual(Buffer.from(password || ''), Buffer.from(validPass));
+    ok = uMatch && pMatch;
+  } catch (_) {}
+  if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, { user: username, expires: Date.now() + 8 * 60 * 60 * 1000 }); // 8h
+  res.json({ token, username });
+});
+
+app.post('/api/logout', (req, res) => {
+  const header = req.headers['authorization'] || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (token) sessions.delete(token);
+  res.json({ success: true });
+});
+
+// All routes below require a valid session
+app.use('/api', authRequired);
 
 // ── Text extraction ───────────────────────────────────────────
 async function extractText(buffer, filename) {
